@@ -1,7 +1,7 @@
 import UIKit
 import PlaygroundSupport
 
-// NSLayoutManager EXTENSION
+// NSLayoutManager Extension
 extension NSLayoutManager {
     
     //  Returns character range that completely fits into the container
@@ -21,17 +21,19 @@ extension NSLayoutManager {
 
 // CUSTOM TEXT VIEW CLASS
 class CustomTextView: UITextView {
+    
+    // Private properties
     private var originalText: String!
     private var originalAttributedText: NSAttributedString!
-    private var maximumNumberOfLinesAllowed: Int = 3
-
+    private let maximumNumberOfLinesAllowed: Int = 3
     private var shouldTrim: Bool = true {
         didSet {
             setNeedsLayout()
         }
     }
-    
-    // OVERRIDE INTERNAL PROPERTIES
+    private let moreText = NSMutableAttributedString(string: "more")
+
+    // Override internal properties
     override var text: String! {
         didSet {
             originalText = text
@@ -46,7 +48,7 @@ class CustomTextView: UITextView {
         }
     }
     
-    // OVERRIDE INTERNAL METHODS
+    // Override internal methods
     override init(frame: CGRect, textContainer: NSTextContainer?) {
         super.init(frame: frame, textContainer: textContainer)
         setupDefaults()
@@ -70,8 +72,7 @@ class CustomTextView: UITextView {
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let point = touches.first?.location(in: self) else { return }
-
-        if pointInTrimTextRange(point: point){
+        if pointInTrimTextRange(point: point) && shouldTrim {
             resetText()
         }
     }
@@ -86,6 +87,7 @@ class CustomTextView: UITextView {
         
         textContainerInset = UIEdgeInsets.zero
         textContainer.lineFragmentPadding = 0.0
+        
     }
     
     private func originalNumberOfLines() -> Int {
@@ -95,32 +97,28 @@ class CustomTextView: UITextView {
     }
     
     private func updateText() {
-        // Read more text
+        // Trim text (more) attributes
         let moreTextAttributes: [NSAttributedString.Key: Any] = [
             .font: font!,
             .foregroundColor: UIColor.lightGray
         ]
-        let moreText = NSAttributedString(string: "more", attributes: moreTextAttributes)
-        let readMoreText = NSMutableAttributedString(string: "... ")
-        readMoreText.append(moreText)
+        moreText.addAttributes(moreTextAttributes, range: NSRange(location: 0, length: moreText.length))
+        let trimText = NSMutableAttributedString(string: "... ")
+        trimText.append(moreText)
         
         textContainer.maximumNumberOfLines = maximumNumberOfLinesAllowed
         // below method takes glyphs into account?
         layoutManager.invalidateLayout(forCharacterRange: layoutManager.characterRangeThatFits(textContainer: textContainer), actualCharacterRange: nil)
-        
         textContainer.size = CGSize(width: bounds.size.width, height: .greatestFiniteMagnitude)
-        var rangeToReplace = layoutManager.characterRangeThatFits(textContainer: textContainer)
-        rangeToReplace.location = NSMaxRange(rangeToReplace) - readMoreText.length
-        rangeToReplace.length = textStorage.length - rangeToReplace.location
-        textStorage.replaceCharacters(in: rangeToReplace, with: readMoreText)
+        
+        let rangeToReplace = rangeToReplaceWithTrimText()
+        textStorage.replaceCharacters(in: rangeToReplace, with: trimText)
         
         invalidateIntrinsicContentSize()
     }
     
     private func resetText() {
-        print("Reset text view")
-        maximumNumberOfLinesAllowed = 0
-        textContainer.maximumNumberOfLines = maximumNumberOfLinesAllowed
+        textContainer.maximumNumberOfLines = 0
         shouldTrim = false
         if originalAttributedText != nil {
             textStorage.replaceCharacters(in: NSRange(location: 0, length: attributedText!.length), with: originalAttributedText)
@@ -130,22 +128,37 @@ class CustomTextView: UITextView {
         invalidateIntrinsicContentSize()
     }
     
+    private func rangeToReplaceWithTrimText() -> NSRange {
+        var rangeToReplace = layoutManager.characterRangeThatFits(textContainer: textContainer)
+        rangeToReplace.location = NSMaxRange(rangeToReplace) - moreText.length - 4
+        rangeToReplace.length = textStorage.length - rangeToReplace.location
+        return rangeToReplace
+    }
+    
+    private func trimTextRange() -> NSRange {
+        var trimTextRange = rangeToReplaceWithTrimText()
+        trimTextRange.location = trimTextRange.location + moreText.length
+        trimTextRange.length = moreText.length + 1
+        return trimTextRange
+    }
+    
+    // Hit-Test
     private func pointInTrimTextRange(point: CGPoint) -> Bool {
-        let boundingRect = layoutManager.boundingRectForCharacterRange(range: NSRange(location: 131, length: 5), container: textContainer)
+        let boundingRect = layoutManager.boundingRectForCharacterRange(range: trimTextRange(), container: textContainer)
         return boundingRect.contains(point)
     }
-
+    
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 }
 
-// MY VIEW
+// View
 let view = UIView(frame: CGRect(x: 0, y: 0, width: 300, height: 300))
 view.backgroundColor = UIColor.yellow
 
-// TEST TEXT
-let testText = "A wealthy American business magnate, playboy, and ingenious scientist, Anthony Edward Tony Stark. He suffers a severe 😎 chest inj🇮🇳ury during ♥️ a kidnapping."
+// Test text
+let testText = "A wealthy American business magnate, playboy, and ingenious scientist, Anthony Edward Tony Stark. 🇮🇳 He suffers a severe 😎 chest injury during ♥️ a kidnapping."
 let attributes: [NSAttributedString.Key: Any] = [
     .font: UIFont.preferredFont(forTextStyle: .caption1)
 ]
@@ -163,14 +176,12 @@ let myTextView: CustomTextView = {
     return tv
 }()
 
-// TEXT VIEW AUTO-LAYOUT CONSTRAINTS
+// Text view auto-layout constraints
 view.addSubview(myTextView)
 myTextView.topAnchor.constraint(equalTo: view.topAnchor, constant: 8).isActive = true
 myTextView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 8).isActive = true
 myTextView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -8).isActive = true
 
-// PLAYGROUND VARS
+// Playground vars
 PlaygroundPage.current.liveView = view
 PlaygroundPage.current.needsIndefiniteExecution = true
-
-
